@@ -51,6 +51,9 @@ test('本地记录、主题、修订草稿可序列化恢复，异常存储降�
   assert.equal(save(d,storage),true);assert.deepEqual(load(storage).data,d);
   storage.setItem(KEY,'broken');assert.ok(load(storage).warning);
   storage.setItem(KEY,JSON.stringify({...fresh(),attempts:[{}]}));assert.ok(load(storage).warning);
+  for (const invalid of [null, {...fresh(),drafts:[]}, {...fresh(),drafts:{test:{selected:{},submitted:false}}}, {...fresh(),revisions:{test:123}}, {...fresh(),achievements:[123]}]) {
+    storage.setItem(KEY,JSON.stringify(invalid));assert.ok(load(storage).warning);
+  }
   assert.equal(save(d,{setItem(){throw Error('quota')}}),false);
   assert.ok(load({getItem(){throw Error('denied')}}).warning);
 });

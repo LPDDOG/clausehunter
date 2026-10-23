@@ -1,5 +1,9 @@
 # Clause Hunter｜合同找茬大师
 
+在线使用：[https://lpddog.github.io/clausehunter/](https://lpddog.github.io/clausehunter/)
+
+源码仓库：[LPDDOG/clausehunter](https://github.com/LPDDOG/clausehunter)。推送 `main` 后自动测试并部署。
+
 纯前端中文合同审查训练网站。原生 HTML、CSS、JavaScript，无后端、数据库、付费API、字体或图标外部依赖。需要 Node.js 20 以上运行开发和构建脚本，无需 `npm install`。
 
 ## 本地运行
