@@ -1,5 +1,6 @@
+import { validateReviewProgress } from './review.js';
 export const KEY = 'clause-hunter-v1';
-export const fresh = () => ({ version: 1, attempts: [], drafts: {}, revisions: {}, achievements: [], theme: 'light' });
+export const fresh = () => ({ version: 1, attempts: [], drafts: {}, revisions: {}, reviewProgress: {}, achievements: [], theme: 'light' });
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const strings = value => Array.isArray(value) && value.every(x => typeof x === 'string');
 export function load(storage) {
@@ -13,7 +14,10 @@ export function load(storage) {
     if (Object.values(d.drafts).some(x => !record(x) || !strings(x.selected) || typeof x.submitted !== 'boolean')) throw Error();
     if (Object.values(d.revisions).some(x => typeof x !== 'string')) throw Error();
     if (d.attempts.some(a => typeof a.caseId !== 'string' || !Number.isFinite(a.score) || a.score < 0 || a.score > 100 || !Array.isArray(a.selected))) throw Error();
-    return { data: { ...fresh(), ...d, theme: d.theme === 'dark' ? 'dark' : 'light' }, warning: '' };
+    let reviewProgress = {}, warning = '';
+    try { reviewProgress = validateReviewProgress(d.reviewProgress); }
+    catch { warning = '复习进度格式异常，已仅重置回练进度；挑战成绩与草稿已保留。'; }
+    return { data: { ...fresh(), ...d, reviewProgress, theme: d.theme === 'dark' ? 'dark' : 'light' }, warning };
   } catch { return { data: fresh(), warning: '本地记录无法读取或格式异常，当前使用临时记录；下次保存会尝试恢复存储。' }; }
 }
 export function save(data, storage) {

@@ -1,5 +1,5 @@
 {
-  "name": "clause-hunter", "version": "1.1.0", "private": true, "type": "module",
+  "name": "clause-hunter", "version": "1.2.0", "private": true, "type": "module",
   "scripts": { "dev": "node scripts/serve.mjs", "build": "node scripts/build.mjs", "test": "node --test tests/*.test.mjs", "preview": "node scripts/serve.mjs dist" },
   "engines": { "node": ">=20" }
 }

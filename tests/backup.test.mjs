@@ -22,7 +22,7 @@ test('备份导出导入恢复挑战、标记和草稿，重新计算分数成�
   assert.deepEqual(merged.data.achievements,['first','perfect','precise']);
   assert.deepEqual(merged.data.drafts,original.drafts);
   assert.deepEqual(merged.data.revisions,original.revisions);
-  assert.deepEqual(merged.added,{attempts:1,drafts:1,revisions:1});
+  assert.deepEqual(merged.added,{attempts:1,drafts:1,revisions:1,reviews:0});
 });
 test('合并幂等、保留本机未提交进度、非空草稿、主题和原始记录ID',()=>{
   const current=sample();current.theme='dark';
@@ -37,7 +37,7 @@ test('合并幂等、保留本机未提交进度、非空草稿、主题和原�
   assert.equal(merged.data.theme,'dark');
   assert.deepEqual(merged.data.drafts[current.attempts[0].caseId],current.drafts[c.id]);
   assert.deepEqual(merged.data.revisions,current.revisions);
-  assert.deepEqual(merged.added,{attempts:0,drafts:0,revisions:0});
+  assert.deepEqual(merged.added,{attempts:0,drafts:0,revisions:0,reviews:0});
 });
 test('不同时间的相同答案保留为独立挑战，重复文件内记录去重',()=>{
   const incoming=sample(); incoming.attempts.push({...incoming.attempts[0]},{...incoming.attempts[0],date:'2026-10-23T07:00:00.000Z'});

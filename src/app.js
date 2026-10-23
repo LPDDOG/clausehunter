@@ -7,6 +7,8 @@ import { escapeHTML as e, icon, link, pill } from './components/ui.js';
 import { config } from './config.js';
 import { createBackup, parseBackup, mergeBackup, MAX_BACKUP_BYTES } from './lib/backup.js';
 import { recordsToolbar, historyList, attemptId, formatDate, ruleHints } from './components/records.js';
+import { reviewItems } from './lib/review.js';
+import { reviewShortcut, reviewList, reviewExercise } from './components/review.js';
 
 const loaded = load();
 let state = loaded.data;
@@ -16,6 +18,9 @@ let showingReference = false;
 let toastTimer;
 let historyFilter = 'all';
 let historyPage = 1;
+let reviewFilter = 'pending';
+let reviewTheme = 'all';
+let reviewSession = { id: '', choice: null, submitted: false };
 const disclaimer = '本网站内容仅用于法律学习和合同审查训练，不构成正式法律意见。具体合同风险应结合交易事实、适用法律及专业意见判断。';
 const best = id => Math.max(0, ...state.attempts.filter(a => a.caseId === id).map(a => a.score));
 const done = id => state.attempts.some(a => a.caseId === id);
@@ -30,7 +35,7 @@ function persist() {
   if (!save(state)) toast('浏览器无法保存本地记录。当前操作仍有效，关闭页面后可能丢失，请检查存储权限。');
 }
 function header(page) {
-  return `<header class="header"><div class="nav-wrap"><a class="brand" href="#/" aria-label="Clause Hunter 首页"><span class="brand-mark">${icon('file', 23)}</span><span>Clause<span class="brand-light">Hunter</span><small>合同找茬大师</small></span></a><nav aria-label="主导航">${[['challenges','合同挑战'],['revision','合同修订'],['scores','我的成绩'],['about','关于项目']].map(([id,label]) => `<a ${page === id || page === 'challenge' && id === 'challenges' || page === 'history' && id === 'scores' ? 'class="active" aria-current="page"' : ''} href="#/${id}">${label}</a>`).join('')}</nav><button class="theme-btn" data-action="theme" aria-label="切换${state.theme === 'dark' ? '浅色' : '深色'}模式">${icon(state.theme === 'dark' ? 'sun' : 'moon')}</button></div></header>`;
+  return `<header class="header"><div class="nav-wrap"><a class="brand" href="#/" aria-label="Clause Hunter 首页"><span class="brand-mark">${icon('file', 23)}</span><span>Clause<span class="brand-light">Hunter</span><small>合同找茬大师</small></span></a><nav aria-label="主导航">${[['challenges','合同挑战'],['revision','合同修订'],['review','错漏回练'],['scores','我的成绩'],['about','关于项目']].map(([id,label]) => `<a ${page === id || page === 'challenge' && id === 'challenges' || page === 'history' && id === 'scores' ? 'class="active" aria-current="page"' : ''} href="#/${id}">${label}</a>`).join('')}</nav><button class="theme-btn" data-action="theme" aria-label="切换${state.theme === 'dark' ? '浅色' : '深色'}模式">${icon(state.theme === 'dark' ? 'sun' : 'moon')}</button></div></header>`;
 }
 function footer() {
   return `<footer><div class="footer-top"><a class="brand" href="#/">${icon('shield')} Clause Hunter</a><span>把每一次审查，变成一次进步。</span><span>独立学习 · 本地保存 · 免费使用</span></div><p>${disclaimer}</p><div class="footer-bottom"><span>© ${new Date().getFullYear()} Clause Hunter · 为审慎思考而设计</span><a href="#/about">关于这个项目 ↗</a></div></footer>`;
@@ -62,9 +67,10 @@ function challenge(c) {
 function reportSummary(c,r) {
   return `<div class="bench-content"><div class="bench-label">本次审查得分</div><div class="score-number ${r.score===100?'green-text':''}">${r.score}<small>/ 100</small></div><div class="result-counts"><div><strong>${r.correct}</strong><span>正确识别</span></div><div><strong>${r.missed}</strong><span>漏判</span></div><div><strong>${r.falsePositive}</strong><span>误判</span></div></div><div class="best-line">本关最佳成绩 <strong>${best(c.id)} 分</strong></div><details class="formula"><summary>查看评分计算</summary><p>得分 = max(0, 四舍五入(100 × 正确识别数 ÷ 实际风险数 − 15 × 误判数))</p><p>本次：100 × ${r.correct} ÷ ${r.total} − 15 × ${r.falsePositive}，最终为 ${r.score} 分。漏判通过降低识别比例扣分，不重复扣分。</p></details><button class="btn primary full" data-action="retry" data-id="${c.id}">重新挑战</button>${link('#/challenges','返回关卡列表','btn secondary full')}</div>`;
 }
-function feedback(c,selected) {
+function feedback(c,selected,onlyClauseId) {
   return `<section class="section feedback"><div class="section-heading"><div><div class="eyebrow blue">REVIEW REPORT</div><h2>逐条看懂每一处判断</h2></div><p>风险等级为教学场景中的相对评级。</p></div>${c.clauses.map((x,i)=>{
     const r = risks[x.risk];
+    if (onlyClauseId && x.id !== onlyClauseId) return '';
     return `<details class="feedback-item" ${r?'open':''}><summary><span>${pill(r ? selected.has(x.id)?'正确识别':'漏判风险' : selected.has(x.id)?'误判':'中性条款',r?selected.has(x.id)?'green':'amber-bg':selected.has(x.id)?'red':'')}<strong>第${i+1}条 · ${r?r.title:x.title}</strong></span><span class="expand-icon">＋</span></summary><div class="feedback-body"><div class="original"><span class="field-label">原始条款</span><p>${x.text}</p></div>${r?`<div class="risk-meta">${pill(r.level+'风险',r.level==='高'?'red':'amber-bg')}${pill(r.nature)}</div><div class="analysis-grid"><div><h4>风险原因</h4><p>${r.reason}</p></div><div><h4>商业影响</h4><p>${r.impact}</p></div></div><h4>修改建议</h4><p>${r.suggestion}</p><div class="reference"><div><strong>参考修改文本</strong><button class="text-link" data-action="copy" data-id="${x.risk}">${icon('copy',15)} 复制条款</button></div><p>${r.reference}</p></div><div class="legal-source"><h4>法律依据与适用边界</h4><p>${r.basis}</p><a href="${sources[r.source].url}" target="_blank" rel="noopener noreferrer">${sources[r.source].title} ↗</a><small>来源核对日期：2026-10-23。适用范围及后续更新应在真实交易中再次核对。</small></div>${link(`#/revision/${x.id}`,`练习修订这条条款 ${icon('arrow',16)}`,'text-link')}`:`<p>${x.neutral}</p>`}</div></details>`;
   }).join('')}</section>`;
 }
@@ -78,7 +84,7 @@ function revision(id) {
 function scores() {
   const attempts = state.attempts; const completed = cases.filter(c=>done(c.id));
   const average = attempts.length ? Math.round(attempts.reduce((n,a)=>n+a.score,0)/attempts.length) : 0;
-  return `<div class="page-intro"><div class="eyebrow blue">YOUR LEARNING RECORD</div><h1>每一次审查，都留下进步。</h1><p>记录保存在当前浏览器，不会自动同步。你可以导出备份后手动迁移。</p></div>${recordsToolbar()}<div class="score-stats">${[['已完成关卡',`${completed.length}<small>/ 10</small>`],['总挑战次数',attempts.length],['历史平均分',`${average}<small>/ 100</small>`],['已解锁成就',`${state.achievements.length}<small>/ 5</small>`]].map(([l,v])=>`<div class="panel padded"><span class="field-label">${l}</span><strong>${v}</strong></div>`).join('')}</div><div class="scores-grid"><section class="panel padded"><h3>各合同主题表现</h3><p class="muted small">已完成关卡的最佳成绩均值；未练习主题单独标注。</p>${types.map(t=>{const cs=cases.filter(c=>c.type===t.id&&done(c.id)); const n=cs.length?Math.round(cs.reduce((n,c)=>n+best(c.id),0)/cs.length):0;return `<div class="bar-row"><span>${t.name}</span><div class="progress-track" role="meter" aria-label="${t.name}最佳平均分" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${n}"><div style="width:${n}%"></div></div><strong>${cs.length?n+' 分':'未练习'}</strong></div>`}).join('')}</section><section class="panel padded"><h3>成就收藏</h3><div class="badge-grid">${badges.map(b=>`<div class="badge ${state.achievements.includes(b.id)?'unlocked':''}"><span>${b.icon}</span><strong>${b.name}</strong><small>${b.description}</small><em>${state.achievements.includes(b.id)?'已解锁':'待解锁'}</em></div>`).join('')}</div></section></div><section class="section"><div class="section-heading"><h2>关卡记录</h2><button class="text-link danger" data-action="reset">重置本地训练记录</button></div>${attempts.length?`<div class="records">${cases.map(c=>`<div><span><small>${typeOf(c).name}</small><strong>${c.title}</strong></span><span>${done(c.id)?`最佳 <b>${best(c.id)}</b> 分`:'尚未完成'}</span>${link(`#/challenge/${c.id}`,done(c.id)?'查看关卡 →':'开始挑战 →','text-link')}</div>`).join('')}</div>`:`<div class="empty-state">${icon('chart',40)}<h3>第一份审查记录，等你开启</h3><p>完成任意关卡，即可在这里查看成绩与成就。</p>${link('#/challenges','去选一份合同')}</div>`}</section>${historyList(state,cases,historyFilter,historyPage)}`;
+  return `<div class="page-intro"><div class="eyebrow blue">YOUR LEARNING RECORD</div><h1>每一次审查，都留下进步。</h1><p>记录保存在当前浏览器，不会自动同步。你可以导出备份后手动迁移。</p></div>${recordsToolbar()}${reviewShortcut(state)}<div class="score-stats">${[['已完成关卡',`${completed.length}<small>/ 10</small>`],['总挑战次数',attempts.length],['历史平均分',`${average}<small>/ 100</small>`],['已解锁成就',`${state.achievements.length}<small>/ 5</small>`]].map(([l,v])=>`<div class="panel padded"><span class="field-label">${l}</span><strong>${v}</strong></div>`).join('')}</div><div class="scores-grid"><section class="panel padded"><h3>各合同主题表现</h3><p class="muted small">已完成关卡的最佳成绩均值；未练习主题单独标注。</p>${types.map(t=>{const cs=cases.filter(c=>c.type===t.id&&done(c.id)); const n=cs.length?Math.round(cs.reduce((n,c)=>n+best(c.id),0)/cs.length):0;return `<div class="bar-row"><span>${t.name}</span><div class="progress-track" role="meter" aria-label="${t.name}最佳平均分" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${n}"><div style="width:${n}%"></div></div><strong>${cs.length?n+' 分':'未练习'}</strong></div>`}).join('')}</section><section class="panel padded"><h3>成就收藏</h3><div class="badge-grid">${badges.map(b=>`<div class="badge ${state.achievements.includes(b.id)?'unlocked':''}"><span>${b.icon}</span><strong>${b.name}</strong><small>${b.description}</small><em>${state.achievements.includes(b.id)?'已解锁':'待解锁'}</em></div>`).join('')}</div></section></div><section class="section"><div class="section-heading"><h2>关卡记录</h2><button class="text-link danger" data-action="reset">重置本地训练记录</button></div>${attempts.length?`<div class="records">${cases.map(c=>`<div><span><small>${typeOf(c).name}</small><strong>${c.title}</strong></span><span>${done(c.id)?`最佳 <b>${best(c.id)}</b> 分`:'尚未完成'}</span>${link(`#/challenge/${c.id}`,done(c.id)?'查看关卡 →':'开始挑战 →','text-link')}</div>`).join('')}</div>`:`<div class="empty-state">${icon('chart',40)}<h3>第一份审查记录，等你开启</h3><p>完成任意关卡，即可在这里查看成绩与成就。</p>${link('#/challenges','去选一份合同')}</div>`}</section>${historyList(state,cases,historyFilter,historyPage)}`;
 }
 function history(id) {
   const attempt = state.attempts.find((a, i) => attemptId(a, i) === id);
@@ -86,6 +92,15 @@ function history(id) {
   if (!c) return `<div class="empty-state"><h1>找不到这份挑战记录</h1><p>记录可能已在本机重置，请从我的成绩重新选择。</p>${link('#/scores', '返回我的成绩')}</div>`;
   const result = scoreCase(c, attempt.selected);
   return `<div class="breadcrumbs">${link('#/scores', `${icon('back',16)} 返回我的成绩`, 'text-link')}<span>/</span><span>历史复盘</span></div><div class="page-intro"><div class="eyebrow blue">PAST REVIEW</div><h1>${c.title}</h1><p>提交时间：${e(formatDate(attempt.date))} · 保留当时的标记，按当前题库展示解析。</p></div><div class="history-report panel padded"><div><span class="field-label">本次记录</span><strong class="history-score">${result.score}<small> / 100</small></strong></div><div class="result-counts"><div><strong>${result.correct}</strong><span>正确识别</span></div><div><strong>${result.missed}</strong><span>漏判</span></div><div><strong>${result.falsePositive}</strong><span>误判</span></div></div>${link(`#/challenge/${c.id}`, '前往本关练习 →', 'btn secondary')}</div><div class="info-note">审查立场：${c.role}。${c.goal} 此页不会改动你正在进行的挑战。</div>${feedback(c, new Set(attempt.selected))}`;
+}
+function reviewPage(id) {
+  if (!id) return reviewList(state,types,reviewFilter,reviewTheme);
+  const items=reviewItems(state), item=items.find(x=>x.clause.id===id);
+  if (!item) return `<div class="empty-state"><h1>这条已不在当前回练清单</h1><p>请根据最新挑战，从清单中选择需要复习的条款。</p>${link('#/review','返回回练清单')}</div>`;
+  if (reviewSession.id !== id) reviewSession={id,choice:null,submitted:false};
+  const selected=new Set(reviewSession.choice ? [id] : []);
+  const next=items.find(x=>x.clause.id!==id && !x.resolved && (reviewTheme==='all' || x.contract.type===reviewTheme));
+  return reviewExercise(item,reviewSession,reviewSession.submitted ? feedback(item.contract,selected,id) : '',next);
 }
 function about() {
   return `<div class="page-intro"><div class="eyebrow blue">ABOUT THE PROJECT</div><h1>让审查能力，在实践中生长。</h1><p>一个关于法律、商业与审慎判断的学习项目。</p></div><section class="panel padded about-lead"><span class="type-icon blue">${icon('shield',28)}</span><h2>Clause Hunter｜合同找茬大师</h2><p>Clause Hunter 是一个面向法学生与法律从业者的交互式合同审查训练项目，旨在通过模拟商业合同场景，帮助用户建立风险识别、商业理解与条款修订意识。</p><p>这里的案例均为虚构教学场景。训练中区分可能涉及违法或无效的合规风险、并不当然违法的商业风险，以及可以进一步优化的谈判安排。每次判断都应回到审查方立场与业务事实。</p></section><div class="feature-grid about-tech">${[['前端技术','原生 HTML、CSS 与 JavaScript；无需运行时依赖，使用哈希路由，支持静态托管与手机访问。'],['数据存储方式','使用浏览器 LocalStorage 保存挑战记录、条款标记、修订草稿和主题偏好，无需注册。'],['规则化评分设计','按正确识别比例计分，误判每条扣15分，最低0分。每次评分均可查看计算过程。'],['AI辅助开发说明','本项目的代码与初版教学素材由AI辅助编写，法条参考经公开来源核对，仍可能存在疏漏；未经过执业律师逐案复核。运行期间不调用AI，也不提供AI法律批改。']].map(([t,d])=>`<article class="panel padded"><h3>${t}</h3><p>${d}</p></article>`).join('')}</div><section class="panel padded source-list"><h3>法律来源与内容维护</h3><p>来源核对日期：2026-10-23。真实合同中的地区规则、司法解释、行业要求及跨境法律适用需要另外核验。</p>${Object.values(sources).map(s=>`<a href="${s.url}" target="_blank" rel="noopener noreferrer">${s.title} ↗</a>`).join('')}<p>跨境案例应先识别CISG、补充准据法、约定交易规则与争议解决机制的关系。贸易术语不决定合同的全部法律问题。</p></section><section class="callout"><div><h3>开放、轻量，也方便继续完善。</h3><p>${config.githubUrl?'欢迎在项目仓库查看源码。':'GitHub 仓库链接尚未配置，可在 src/config.js 中填写。'}</p></div>${/^https:\/\/github\.com\//.test(config.githubUrl)?`<a class="btn secondary" href="${e(config.githubUrl)}" target="_blank" rel="noopener noreferrer">访问 GitHub ↗</a>`:''}</section>`;
@@ -99,11 +114,12 @@ function render() {
   else if(page==='revision') content=revision(id);
   else if(page==='scores') content=scores();
   else if(page==='history') content=history(id);
+  else if(page==='review') content=reviewPage(id);
   else if(page==='about') content=about();
   else content=`<div class="empty-state"><h1>页面不存在</h1>${link('#/','返回首页')}</div>`;
   document.documentElement.dataset.theme=state.theme;
   document.querySelector('#app').innerHTML=`${header(page)}<main id="main" class="container ${page?'inner-page':''}" tabindex="-1">${content}</main>${footer()}<dialog id="confirm-dialog"><div class="dialog-content"></div></dialog>`;
-  document.title=`${({'challenges':'合同挑战','challenge':'合同审查','revision':'合同修订','scores':'我的成绩','history':'历史复盘','about':'关于项目'})[page] || '发现合同里的隐藏风险'} · Clause Hunter`;
+  document.title=`${({'challenges':'合同挑战','challenge':'合同审查','revision':'合同修订','scores':'我的成绩','history':'历史复盘','review':'错漏回练','about':'关于项目'})[page] || '发现合同里的隐藏风险'} · Clause Hunter`;
 }
 function confirmAction(title,message,label,callback) {
   const d=document.querySelector('#confirm-dialog');
@@ -129,13 +145,22 @@ document.addEventListener('click',async ev=>{
   if(action==='theme'){state.theme=state.theme==='light'?'dark':'light';persist();render();}
   if(action==='filter'){filter=id;render();}
   if(action==='history-page') { historyPage = Math.max(1, Number(b.dataset.page) || 1); render(); document.querySelector('#history-list')?.scrollIntoView({behavior:'smooth'}); }
+  if(action==='review-filter') { reviewFilter=id; render(); }
+  if(action==='review-retry') { reviewSession={id:reviewSession.id,choice:null,submitted:false};render(); }
+  if(action==='review-submit') {
+    const item=reviewItems(state).find(x=>x.clause.id===reviewSession.id);
+    if(!item || reviewSession.choice===null || reviewSession.submitted)return;
+    state.reviewProgress[item.clause.id]={source:item.source,judgment:reviewSession.choice,reviewedAt:new Date().toISOString()};
+    reviewSession.submitted=true;persist();render();
+    document.querySelector('.practice-result').scrollIntoView({behavior:'smooth',block:'center'});
+  }
   if(action==='export-backup') {
     try {
       const blob = new Blob([createBackup(state)], {type:'application/json;charset=utf-8'});
       const url = URL.createObjectURL(blob), a = document.createElement('a');
       a.href = url; a.download = `clause-hunter-${new Date().toISOString().slice(0,10)}.json`;
       document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
-      backupStatus('备份已准备下载，包含成绩、审查进度与修订草稿。请妥善保管文件。');
+      backupStatus('备份已准备下载，包含成绩、审查进度、回练进度与修订草稿。请妥善保管文件。');
     } catch { backupStatus('未能生成备份，请重试。现有记录未改变。', true); }
   }
   if(action==='choose-backup') document.querySelector('#backup-file').click();
@@ -157,7 +182,7 @@ document.addEventListener('click',async ev=>{
     try {await navigator.clipboard.writeText(risks[id].reference);toast('参考条款已复制');}
     catch {const ta=document.createElement('textarea');ta.value=risks[id].reference;document.body.append(ta);ta.select();const ok=document.execCommand('copy');ta.remove();toast(ok?'参考条款已复制':'无法自动复制，请选中参考文本手动复制。');}
   }
-  if(action==='reset') confirmAction('重置本地训练记录？','将清除挑战成绩、成就、审查进度和修订草稿，无法恢复。主题偏好保留。','确认清除',()=>{state={...fresh(),theme:state.theme};persist();render();toast('本地训练记录已清除');});
+  if(action==='reset') confirmAction('重置本地训练记录？','将清除挑战成绩、成就、审查进度、回练进度和修订草稿，无法恢复。主题偏好保留。','确认清除',()=>{state={...fresh(),theme:state.theme};persist();render();toast('本地训练记录已清除');});
 });
 document.addEventListener('input',ev=>{
   if(ev.target.id!=='revision-input')return;
@@ -177,14 +202,19 @@ function backupStatus(message, error = false) {
 document.addEventListener('change',async ev=>{
   if(ev.target.id==='revision-select'){showingReference=false;location.hash=`/revision/${ev.target.value}`;}
   if(ev.target.id==='history-filter'){historyFilter=ev.target.value;historyPage=1;render();document.querySelector('#history-filter').focus({preventScroll:true});}
+  if(ev.target.id==='review-theme'){reviewTheme=ev.target.value;render();document.querySelector('#review-theme').focus({preventScroll:true});}
+  if(ev.target.name==='review-choice' && !reviewSession.submitted && ['true','false'].includes(ev.target.value)){
+    reviewSession.choice=ev.target.value==='true';render();
+    document.querySelector(`input[name="review-choice"][value="${reviewSession.choice}"]`)?.focus({preventScroll:true});
+  }
   if(ev.target.id==='backup-file') {
     const file = ev.target.files?.[0]; ev.target.value=''; if(!file)return;
     try {
       if(file.size>MAX_BACKUP_BYTES)throw Error('文件超过5MB，无法导入。');
       const incoming = parseBackup(await file.text());
       const preview = mergeBackup(state,incoming).added;
-      if (!preview.attempts && !preview.drafts && !preview.revisions) { backupStatus('备份中的记录已存在，没有新增内容。'); return; }
-      confirmAction('合并这份训练备份？',`将新增 ${preview.attempts} 次挑战、${preview.drafts} 份审查进度、${preview.revisions} 份修订草稿。本机已有进度和非空草稿优先保留，重复挑战不重复计数。分数与成就按当前题库重新计算。`,'确认合并',()=>{
+      if (!preview.attempts && !preview.drafts && !preview.revisions && !preview.reviews) { backupStatus('备份中的记录已存在，没有新增内容。'); return; }
+      confirmAction('合并这份训练备份？',`将新增 ${preview.attempts} 次挑战、${preview.drafts} 份审查进度、${preview.revisions} 份修订草稿，合并 ${preview.reviews} 条回练进度。本机已有进度和非空草稿优先保留，重复挑战不重复计数。分数与成就按当前题库重新计算。`,'确认合并',()=>{
         const merged=mergeBackup(state,incoming);
         if(!save(merged.data)) { backupStatus('本地存储空间不足或不可用，导入未生效，现有记录保持不变。',true); return; }
         state=merged.data;render();backupStatus(`导入完成，新增 ${merged.added.attempts} 次挑战。原有记录已保留。`);
@@ -192,6 +222,6 @@ document.addEventListener('change',async ev=>{
     } catch(error) { backupStatus(error.message || '无法读取备份文件，现有记录未改变。',true); }
   }
 });
-window.addEventListener('hashchange',()=>{showingReference=false;render();window.scrollTo(0,0);document.querySelector('#main').focus({preventScroll:true});});
+window.addEventListener('hashchange',()=>{showingReference=false;reviewSession={id:'',choice:null,submitted:false};render();window.scrollTo(0,0);document.querySelector('#main').focus({preventScroll:true});});
 render();
 if(loaded.warning)toast(loaded.warning);

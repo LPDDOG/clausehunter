@@ -1,6 +1,7 @@
 import { cases } from '../data/cases.js';
 import { scoreCase } from './scoring.js';
 import { unlocked } from './achievements.js';
+import { validateReviewProgress, mergeReviewProgress } from './review.js';
 
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024;
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -28,10 +29,10 @@ function validateData(data) {
     if (!cases.some(c => c.clauses.some(x => x.id === id && x.risk)) || typeof text !== 'string' || text.length > 20000) invalid('备份中含无效或超过两万字的修订草稿。');
     revisions[id] = text;
   }
-  return { attempts, drafts, revisions };
+  return { attempts, drafts, revisions, reviewProgress: validateReviewProgress(data.reviewProgress) };
 }
 export function createBackup(state) {
-  return JSON.stringify({ app: 'clause-hunter', backupVersion: 1, exportedAt: new Date().toISOString(), data: { attempts: state.attempts, drafts: state.drafts, revisions: state.revisions } }, null, 2);
+  return JSON.stringify({ app: 'clause-hunter', backupVersion: 1, exportedAt: new Date().toISOString(), data: { attempts: state.attempts, drafts: state.drafts, revisions: state.revisions, reviewProgress: state.reviewProgress || {} } }, null, 2);
 }
 export function parseBackup(text) {
   if (typeof text !== 'string' || new TextEncoder().encode(text).length > MAX_BACKUP_BYTES) invalid('文件超过5MB，无法导入。');
@@ -51,11 +52,13 @@ export function mergeBackup(current, incoming) {
   const drafts = { ...incoming.drafts, ...current.drafts };
   const revisions = { ...incoming.revisions };
   for (const [id, text] of Object.entries(current.revisions)) if (text.trim() || !revisions[id]) revisions[id] = text;
+  const reviewProgress = mergeReviewProgress(current.reviewProgress, incoming.reviewProgress, attempts);
   const added = {
     attempts: attempts.length - current.attempts.length,
     drafts: Object.keys(drafts).length - Object.keys(current.drafts).length,
-    revisions: Object.keys(revisions).filter(id => revisions[id].trim() && !current.revisions[id]?.trim()).length
+    revisions: Object.keys(revisions).filter(id => revisions[id].trim() && !current.revisions[id]?.trim()).length,
+    reviews: Object.entries(reviewProgress).filter(([id,p]) => JSON.stringify(p) !== JSON.stringify(current.reviewProgress?.[id])).length
   };
-  const data = { ...current, attempts, drafts, revisions, achievements: unlocked(attempts, cases) };
+  const data = { ...current, attempts, drafts, revisions, reviewProgress, achievements: unlocked(attempts, cases) };
   return { data, added };
 }
