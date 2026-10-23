@@ -9,6 +9,7 @@ import { createBackup, parseBackup, mergeBackup, MAX_BACKUP_BYTES } from './lib/
 import { recordsToolbar, historyList, attemptId, formatDate, ruleHints } from './components/records.js';
 import { reviewItems } from './lib/review.js';
 import { reviewShortcut, reviewList, reviewExercise } from './components/review.js';
+import { gameHome, missionMap, progressHUD, stars } from './components/game.js';
 
 const loaded = load();
 let state = loaded.data;
@@ -16,6 +17,7 @@ let filter = 'all';
 let revisionId = '';
 let showingReference = false;
 let toastTimer;
+let demoChoice = null;
 let historyFilter = 'all';
 let historyPage = 1;
 let reviewFilter = 'pending';
@@ -35,25 +37,17 @@ function persist() {
   if (!save(state)) toast('浏览器无法保存本地记录。当前操作仍有效，关闭页面后可能丢失，请检查存储权限。');
 }
 function header(page) {
-  return `<header class="header"><div class="nav-wrap"><a class="brand" href="#/" aria-label="Clause Hunter 首页"><span class="brand-mark">${icon('file', 23)}</span><span>Clause<span class="brand-light">Hunter</span><small>合同找茬大师</small></span></a><nav aria-label="主导航">${[['challenges','合同挑战'],['revision','合同修订'],['review','错漏回练'],['scores','我的成绩'],['about','关于项目']].map(([id,label]) => `<a ${page === id || page === 'challenge' && id === 'challenges' || page === 'history' && id === 'scores' ? 'class="active" aria-current="page"' : ''} href="#/${id}">${label}</a>`).join('')}</nav><button class="theme-btn" data-action="theme" aria-label="切换${state.theme === 'dark' ? '浅色' : '深色'}模式">${icon(state.theme === 'dark' ? 'sun' : 'moon')}</button></div></header>`;
+  return `<header class="header"><div class="nav-wrap"><a class="brand" href="#/" aria-label="Clause Hunter 首页"><span class="brand-mark">${icon('search', 23)}</span><span>Clause<span class="brand-light">Hunter</span><small>合同找茬大师</small></span></a><nav aria-label="主导航">${[['challenges','合同挑战'],['revision','合同修订'],['review','错漏回练'],['scores','我的成绩'],['about','关于项目']].map(([id,label]) => `<a ${page === id || page === 'challenge' && id === 'challenges' || page === 'history' && id === 'scores' ? 'class="active" aria-current="page"' : ''} href="#/${id}">${label}</a>`).join('')}</nav><button class="theme-btn" data-action="theme" aria-label="切换${state.theme === 'dark' ? '浅色' : '深色'}模式">${icon(state.theme === 'dark' ? 'sun' : 'moon')}</button></div></header>`;
 }
 function footer() {
   return `<footer><div class="footer-top"><a class="brand" href="#/">${icon('shield')} Clause Hunter</a><span>把每一次审查，变成一次进步。</span><span>独立学习 · 本地保存 · 免费使用</span></div><p>${disclaimer}</p><div class="footer-bottom"><span>© ${new Date().getFullYear()} Clause Hunter · 为审慎思考而设计</span><a href="#/about">关于这个项目 ↗</a></div></footer>`;
 }
-function card(c, index) {
-  const t = typeOf(c); const isDone = done(c.id);
-  return `<a class="case-card" href="#/challenge/${c.id}"><div class="card-top"><span class="type-icon ${t.color}">${t.icon}</span>${pill(isDone ? `最佳 ${best(c.id)} 分` : c.difficulty, isDone ? 'green' : '')}</div><div class="eyebrow">${t.name} <span> / ${String(index + 1).padStart(2, '0')}</span></div><h3>${c.title}</h3><p>${c.subtitle}</p><div class="case-meta"><span>◷ 约 ${c.minutes} 分钟</span><span>6 条审查条款</span><span class="card-arrow">${icon('arrow',18)}</span></div></a>`;
-}
 function home() {
-  return `<section class="hero"><div class="hero-copy"><div class="eyebrow blue"><span class="live-dot"></span> 让法律知识，成为审查直觉</div><h1>你能发现合同里<br>隐藏的<span class="blue">风险</span>吗？<span class="title-dot"></span></h1><p class="hero-desc">在真实感商业场景中，训练你的合同审查能力。<br>从发现疑点到动手修订，让每一份合同都经得起推敲。</p><div class="hero-actions">${link('#/challenge/purchase-1', `开始挑战 ${icon('arrow',18)}`)}${link('#/challenges','查看训练关卡','btn secondary')}</div><div class="hero-proof"><span>${icon('check',15)} 无需注册</span><span>${icon('check',15)} 即时解析</span><span>${icon('check',15)} 进度本地保存</span></div></div><div class="preview-scene"><div class="document-preview"><div class="document-toolbar"><span><i></i><i></i><i></i></span><span>采购合同_审查中.pdf</span>${icon('file',15)}</div><div class="paper"><div class="document-kicker">CONTRACT REVIEW / 001</div><h3>办公设备采购合同</h3><div class="paper-parties">甲方：星澜科技有限公司<br>乙方：恒信设备供应有限公司</div><div class="paper-line"></div><h4>第二条 &nbsp; 付款安排</h4><p>甲方应在签约后三日内<span class="highlight">支付全部合同价款80万元</span>，乙方无需提供履约担保。</p><div class="preview-note"><span>⚑ 潜在风险</span><small>全额预付，缺少履约保障</small></div><h4>第四条 &nbsp; 验收方式</h4><p>设备送达后，以<span class="highlight amber">“能正常使用”</span>为标准验收，不另约定测试流程。</p><div class="paper-line short"></div><div class="paper-line"></div><div class="paper-stamp">CH<br><small>REVIEW</small></div></div></div><div class="floating-chip">${icon('search',22)}<span><strong>发现风险，是第一步</strong><small>理解风险，才是关键。</small></span><span class="chip-check">✓</span></div></div></section>
-    <div class="stat-strip"><div><strong>05<span>种</span></strong><p>常见商业合同</p></div><div><strong>10<span>个</span></strong><p>独立业务场景</p></div><div><strong>30<span>处</span></strong><p>核心风险解析</p></div><div><strong>100<span>%</span></strong><p>免费 · 无需登录</p></div></div>
-    <section class="section"><div class="section-heading"><div><div class="eyebrow blue">LEARN BY DOING</div><h2>像审查真实合同一样学习</h2></div><p>不只记住答案，更学会提出正确的问题。</p></div><div class="feature-grid">${[['search','01','发现隐藏风险','站在具体交易一方的立场，点击条款，标记你认为值得关注的问题。'],['chart','02','理解风险逻辑','查看评分与逐条解析，区分合规底线、商业风险和谈判空间。'],['edit','03','动手完善条款','写下自己的修改方案，对照参考文本，将判断变成可执行的条款。']].map(([ic,n,title,desc]) => `<article class="feature"><div>${icon(ic,23)}<span>${n}</span></div><h3>${title}</h3><p>${desc}</p></article>`).join('')}</div></section>
-    <section class="section home-cases"><div class="section-heading"><div><div class="eyebrow blue">YOUR NEXT CHALLENGE</div><h2>从一份合同开始</h2></div>${link('#/challenges',`全部 10 个关卡 ${icon('arrow',17)}`,'text-link')}</div><div class="case-grid">${[cases[0],cases[2],cases[6]].map(c=>card(c,cases.indexOf(c))).join('')}</div><div class="topic-row">${types.map(t=>link(`#/challenges/${t.id}`,`${t.icon} ${t.name}`,'topic-link')).join('')}</div></section><section class="callout"><div>${icon('shield',28)}<h3>合同审查，从来不只有“对”与“错”。</h3><p>在交易背景中理解风险，在商业目标中寻找平衡。</p></div>${link('#/challenge/purchase-1','开启第一次审查 →')}</section>`;
+  return gameHome(state,cases,types,demoChoice);
 }
 function challenges(type) {
-  if (type && types.some(t=>t.id===type)) filter = type;
-  const filtered = cases.filter(c=>filter === 'all' || c.type === filter);
-  return `<div class="page-intro"><div class="eyebrow blue">CONTRACT CHALLENGES</div><h1>选择你的下一份合同</h1><p>五类商业场景，十次独立审查。每一个疑点，都值得认真推敲。</p></div><div class="list-summary"><span>${icon('file')} 训练题库 <strong>10</strong></span><span>已完成 <strong>${new Set(state.attempts.map(a=>a.caseId)).size} / 10</strong></span></div><div class="filters" role="group" aria-label="合同类型筛选">${[{id:'all',name:'全部合同'},...types].map(t=>`<button class="filter ${filter===t.id?'selected':''}" data-action="filter" data-id="${t.id}" aria-pressed="${filter===t.id}">${t.name}</button>`).join('')}</div><div class="case-grid all-cases">${filtered.map(c=>card(c,cases.indexOf(c))).join('')}</div><div class="info-note">${icon('shield')} 你将代表指定一方审查合同。偏向对方的条款并不当然违法，请结合业务背景判断。</div>`;
+  if (type && types.some(t=>t.id===type)) filter=type;
+  return `${progressHUD(state,cases)}<div class="page-intro level-intro"><div class="eyebrow">THE CASE MAP / 自由选关</div><h1>十份合同，十场细节挑战。</h1><p>选择你感兴趣的领域。全部关卡开放，按自己的节奏探索。</p></div><div class="filters" role="group" aria-label="合同类型筛选">${[{id:'all',name:'全部合同'},...types].map(t=>`<button class="filter ${filter===t.id?'selected':''}" data-action="filter" data-id="${t.id}" aria-pressed="${filter===t.id}">${t.name}</button>`).join('')}</div><div class="map-heading"><p>从一条疑点开始，解开一份合同。</p><details class="star-guide"><summary>星标怎么算？</summary><p>按本关最佳分显示：90～100分为3星，60～89分为2星，1～59分为1星，0分或未挑战为0星。星标仅作视觉反馈，不改变评分与成就。</p></details></div>${missionMap(cases,types,state.attempts,filter)}<div class="map-note">${icon('shield',17)} 站在你的审查方立场判断；有商业风险的条款并不当然违法。标记后提交，才能解锁本轮解析。</div>`;
 }
 function challenge(c) {
   const draft = state.drafts[c.id];
@@ -65,7 +59,7 @@ function challenge(c) {
   <div class="review-layout"><section class="contract-panel"><div class="panel-heading"><span>${icon('file')} 合同条款</span><small>${result?'查看标记结果及下方解析':'点击条款，标记或取消潜在风险'}</small></div><div class="contract-paper"><div class="contract-doc-title"><small>模拟商业合同 · 教学节选</small><h2>${c.title.includes('合同')?c.title:typeOf(c).name+' · 合同节选'}</h2><p>审查视角：${c.role}</p></div>${c.clauses.map((x,i)=>`<button class="clause ${status(x)}" ${result?'disabled':''} data-action="toggle-clause" data-case="${c.id}" data-id="${x.id}" aria-pressed="${selected.has(x.id)}"><span class="clause-head"><strong>第${['一','二','三','四','五','六'][i]}条 &nbsp; ${x.title}</strong><span>${statusText(x)}</span></span><span class="clause-text">${x.text}</span></button>`).join('')}<div class="document-end">— 合同节选结束 —</div></div></section><aside class="workbench"><div class="panel-heading">${icon('search')} 审查工作台</div>${result?reportSummary(c,result):`<div class="bench-content"><div class="bench-label">已标记潜在风险</div><div class="marked-number">${selected.size}<span> / ${c.clauses.length} 条条款</span></div><div class="progress-track"><div style="width:${selected.size / c.clauses.length*100}%"></div></div><p class="muted small">标记数量不等于审查完成度。请逐条阅读后提交。</p><div class="marked-list">${selected.size?c.clauses.filter(x=>selected.has(x.id)).map(x=>`<div><span>⚑ ${x.title}</span><button data-action="toggle-clause" data-case="${c.id}" data-id="${x.id}" aria-label="取消标记${x.title}">×</button></div>`).join(''):`<div class="empty-small">${icon('file',32)}<p>从左侧合同中发现第一处疑点</p><small>也可以使用 Tab 与 Enter 标记</small></div>`}</div><button class="btn primary full" data-action="submit" data-id="${c.id}">提交审查结果 ${icon('arrow',17)}</button><p class="save-note">${icon('check',13)} 标记进度自动保存</p></div><div class="bench-tip"><strong>审查提示</strong><p>关注“谁来承担风险”“义务是否明确”“发生问题如何退出”。无需把每一条都标为风险。</p></div>`}</aside></div>${result?feedback(c,selected):''}`;
 }
 function reportSummary(c,r) {
-  return `<div class="bench-content"><div class="bench-label">本次审查得分</div><div class="score-number ${r.score===100?'green-text':''}">${r.score}<small>/ 100</small></div><div class="result-counts"><div><strong>${r.correct}</strong><span>正确识别</span></div><div><strong>${r.missed}</strong><span>漏判</span></div><div><strong>${r.falsePositive}</strong><span>误判</span></div></div><div class="best-line">本关最佳成绩 <strong>${best(c.id)} 分</strong></div><details class="formula"><summary>查看评分计算</summary><p>得分 = max(0, 四舍五入(100 × 正确识别数 ÷ 实际风险数 − 15 × 误判数))</p><p>本次：100 × ${r.correct} ÷ ${r.total} − 15 × ${r.falsePositive}，最终为 ${r.score} 分。漏判通过降低识别比例扣分，不重复扣分。</p></details><button class="btn primary full" data-action="retry" data-id="${c.id}">重新挑战</button>${link('#/challenges','返回关卡列表','btn secondary full')}</div>`;
+  return `<div class="bench-content"><div class="bench-label">本次审查得分</div><div class="score-game-label">${r.score===100?'PERFECT REVIEW / 满分识别':'REVIEW COMPLETE / 挑战完成'}</div><div class="score-number ${r.score===100?'green-text':''}">${r.score}<small>/ 100</small></div><div class="result-stars">${stars(r.score,true)}</div><div class="result-counts"><div><strong>${r.correct}</strong><span>正确识别</span></div><div><strong>${r.missed}</strong><span>漏判</span></div><div><strong>${r.falsePositive}</strong><span>误判</span></div></div><div class="best-line">本关最佳成绩 <strong>${best(c.id)} 分</strong></div><details class="formula"><summary>查看评分计算</summary><p>得分 = max(0, 四舍五入(100 × 正确识别数 ÷ 实际风险数 − 15 × 误判数))</p><p>本次：100 × ${r.correct} ÷ ${r.total} − 15 × ${r.falsePositive}，最终为 ${r.score} 分。漏判通过降低识别比例扣分，不重复扣分。</p></details><button class="btn primary full" data-action="retry" data-id="${c.id}">重新挑战</button>${link('#/challenges','返回关卡列表','btn secondary full')}</div>`;
 }
 function feedback(c,selected,onlyClauseId) {
   return `<section class="section feedback"><div class="section-heading"><div><div class="eyebrow blue">REVIEW REPORT</div><h2>逐条看懂每一处判断</h2></div><p>风险等级为教学场景中的相对评级。</p></div>${c.clauses.map((x,i)=>{
@@ -142,6 +136,9 @@ document.addEventListener('click',async ev=>{
   if (ev.target.closest('.skip')) { ev.preventDefault(); document.querySelector('#main').focus(); return; }
   const b=ev.target.closest('[data-action]');if(!b)return;
   const {action,id}=b.dataset;
+  if(action==='demo-answer') {
+    if(cases[0].clauses.slice(0,2).some(x=>x.id===id)) { demoChoice=id;const scroll=window.scrollY;render();window.scrollTo(0,scroll);document.querySelector(`.warmup-clause[data-id="${id}"]`)?.focus({preventScroll:true}); }
+  }
   if(action==='theme'){state.theme=state.theme==='light'?'dark':'light';persist();render();}
   if(action==='filter'){filter=id;render();}
   if(action==='history-page') { historyPage = Math.max(1, Number(b.dataset.page) || 1); render(); document.querySelector('#history-list')?.scrollIntoView({behavior:'smooth'}); }
